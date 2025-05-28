@@ -60,6 +60,7 @@ OUTPUTS_DIR.mkdir(exist_ok=True)
 MAX_DURATION = 30  # Maximum duration in seconds
 SAMPLE_RATE = 32000  # Audio sample rate
 TOKENS_PER_SECOND = 50  # Approximate number of tokens per second
+MAX_NEW_TOKENS = 1024  # Maximum number of tokens for generation
 
 # Initialize model
 try:
@@ -120,7 +121,23 @@ class GenerationResponse(BaseModel):
 
 def calculate_max_new_tokens(duration: int) -> int:
     """Calculate the number of tokens needed for the desired duration."""
-    return min(int(duration * TOKENS_PER_SECOND), model.config.max_position_embeddings - 100)
+    tokens = min(int(duration * TOKENS_PER_SECOND), MAX_NEW_TOKENS)
+    logger.info(f"Calculated tokens for {duration}s duration: {tokens}")
+    return tokens
+
+@app.get("/", 
+    response_model=dict,
+    summary="Health Check",
+    description="Check if the API is running and get basic system information"
+)
+async def root():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "model": "musicgen-small",
+        "device": str(device),
+        "version": "1.0.0"
+    }
 
 @app.post("/generate/", 
     response_model=GenerationResponse,
@@ -142,7 +159,7 @@ async def generate(params: GenerationParams):
         
         # Calculate tokens based on duration
         max_new_tokens = calculate_max_new_tokens(params.duration)
-        logger.info(f"Calculated max_new_tokens: {max_new_tokens}")
+        logger.info(f"Using max_new_tokens: {max_new_tokens}")
         
         # Process the text input
         inputs = processor(
