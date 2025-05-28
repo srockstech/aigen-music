@@ -11,21 +11,19 @@ RUN apt-get update && apt-get install -y \
 # Create venv_audiocraft
 RUN python -m venv venv_audiocraft
 
-# Activate virtual environment
-SHELL ["/bin/bash", "-c"]
-RUN source venv_audiocraft/bin/activate
-
-# Install PyTorch CPU first
-RUN pip install --no-cache-dir torch==2.1.0+cpu torchaudio==2.1.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu
-
-# Copy and install requirements
+# Copy requirements first
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Install AudioCraft from source with specific torch version
-RUN git clone --depth 1 https://github.com/facebookresearch/audiocraft.git && \
+# Install dependencies in virtual environment
+SHELL ["/bin/bash", "-c"]
+RUN source venv_audiocraft/bin/activate && \
+    pip install --no-cache-dir torch==2.1.0+cpu torchaudio==2.1.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements.txt && \
+    git clone --depth 1 https://github.com/facebookresearch/audiocraft.git && \
     cd audiocraft && \
-    pip install --no-cache-dir -e .
+    pip install --no-cache-dir -e . && \
+    cd .. && \
+    rm -rf audiocraft
 
 # Copy application files
 COPY api.py .
@@ -39,5 +37,9 @@ RUN mkdir -p outputs
 # Expose default port
 EXPOSE 8000
 
-# Start the application using Python script with activated environment
-CMD source venv_audiocraft/bin/activate && python start.py 
+# Create a wrapper script to activate venv and run the app
+RUN echo '#!/bin/bash\nsource /app/venv_audiocraft/bin/activate\nexec python start.py' > /app/run.sh && \
+    chmod +x /app/run.sh
+
+# Start the application
+CMD ["/app/run.sh"] 
