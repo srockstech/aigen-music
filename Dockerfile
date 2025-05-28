@@ -28,18 +28,18 @@ RUN source venv_audiocraft/bin/activate && \
 # Copy application files
 COPY api.py .
 COPY start.py .
+COPY run.sh .
 COPY README.md .
 COPY LICENSE .
 
 # Create outputs directory
 RUN mkdir -p outputs
 
+# Make run script executable
+RUN chmod +x run.sh
+
 # Expose default port
 EXPOSE 8000
 
-# Create a wrapper script to activate venv and run the app
-RUN echo '#!/bin/bash\nsource /app/venv_audiocraft/bin/activate\nexec python start.py' > /app/run.sh && \
-    chmod +x /app/run.sh
-
 # Start the application
-CMD ["/app/run.sh"] 
+CMD ["./run.sh"] 
