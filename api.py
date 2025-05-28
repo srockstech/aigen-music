@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
+import asyncio
+import threading
 
 import torch
 from fastapi import FastAPI, HTTPException
@@ -72,21 +74,37 @@ SAMPLE_RATE = 32000  # Audio sample rate
 TOKENS_PER_SECOND = 50  # Approximate number of tokens per second
 MAX_NEW_TOKENS = 1024  # Maximum number of tokens for generation
 
-# Initialize model
-try:
-    logger.info("Loading MusicGen model...")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_id = "facebook/musicgen-small"
-    processor = AutoProcessor.from_pretrained(model_id)
-    model = MusicgenForConditionalGeneration.from_pretrained(
-        model_id,
-        torch_dtype=torch.float32
-    )
-    model.to(device)
-    logger.info(f"Model loaded successfully on {device}")
-except Exception as e:
-    logger.error(f"Failed to load model: {str(e)}")
-    raise
+# Global variables for model state
+model = None
+processor = None
+model_ready = False
+model_error = None
+
+def load_model():
+    """Load the model in a separate thread"""
+    global model, processor, model_ready, model_error
+    try:
+        logger.info("Starting model loading process...")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info(f"Using device: {device}")
+        
+        model_id = "facebook/musicgen-small"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = MusicgenForConditionalGeneration.from_pretrained(
+            model_id,
+            torch_dtype=torch.float32
+        )
+        model.to(device)
+        
+        model_ready = True
+        logger.info("Model loaded successfully!")
+    except Exception as e:
+        model_error = str(e)
+        logger.error(f"Failed to load model: {str(e)}")
+        model_ready = False
+
+# Start model loading in background
+threading.Thread(target=load_model, daemon=True).start()
 
 # Mount static files
 app.mount("/files", StaticFiles(directory=str(OUTPUTS_DIR)), name="files")
@@ -138,14 +156,33 @@ def calculate_max_new_tokens(duration: int) -> int:
 @app.get("/", 
     response_model=dict,
     summary="Health Check",
-    description="Check if the API is running and get basic system information"
+    description="Check if the API is running and get model loading status"
 )
 async def root():
-    """Health check endpoint"""
+    """Health check endpoint that responds immediately"""
+    status = {
+        "status": "starting" if not model_ready and not model_error else "healthy" if model_ready else "error",
+        "model_status": "loading" if not model_ready and not model_error else "ready" if model_ready else "failed",
+        "error": model_error if model_error else None,
+        "version": "1.0.0"
+    }
+    
+    # Return 200 even if model is loading to pass Railway health checks
+    return status
+
+@app.get("/status",
+    response_model=dict,
+    summary="Detailed Status",
+    description="Get detailed status of the API and model"
+)
+async def status():
+    """Detailed status endpoint"""
     return {
-        "status": "healthy",
+        "status": "healthy" if model_ready else "starting",
         "model": "musicgen-small",
-        "device": str(device),
+        "model_status": "ready" if model_ready else "loading",
+        "device": str(torch.device("cuda" if torch.cuda.is_available() else "cpu")),
+        "error": model_error if model_error else None,
         "version": "1.0.0"
     }
 
@@ -164,6 +201,12 @@ async def root():
 )
 async def generate(params: GenerationParams):
     """Generate music from text prompt"""
+    if not model_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="Model is still loading. Please try again in a few moments."
+        )
+    
     try:
         logger.info(f"Generating audio for prompt: {params.text}")
         
@@ -177,6 +220,7 @@ async def generate(params: GenerationParams):
             padding=True,
             return_tensors="pt",
         )
+        device = next(model.parameters()).device
         inputs = {k: v.to(device) for k, v in inputs.items()}
         
         # Generate audio with safety checks
@@ -194,13 +238,6 @@ async def generate(params: GenerationParams):
                 raise HTTPException(
                     status_code=503,
                     detail="Server is out of memory. Try a shorter duration or wait a moment."
-                )
-            raise
-        except IndexError as e:
-            if "index out of range" in str(e):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Duration too long. Maximum allowed duration is {MAX_DURATION} seconds."
                 )
             raise
         
