@@ -8,17 +8,18 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first to leverage Docker cache
-COPY requirements.txt .
-
 # Create and activate virtual environment
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies
+# Install PyTorch CPU first
+RUN pip install --no-cache-dir torch==2.1.0+cpu torchaudio==2.1.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Copy and install other requirements
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install AudioCraft from source
+# Install AudioCraft from source with specific torch version
 RUN git clone https://github.com/facebookresearch/audiocraft.git && \
     cd audiocraft && \
     pip install --no-cache-dir -e .
@@ -26,9 +27,12 @@ RUN git clone https://github.com/facebookresearch/audiocraft.git && \
 # Copy application code
 COPY . .
 
+# Create outputs directory
+RUN mkdir -p outputs
+
 # Expose port
 ENV PORT=8000
 EXPOSE 8000
 
 # Start the application
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "${PORT}"] 
