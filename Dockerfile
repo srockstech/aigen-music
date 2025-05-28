@@ -10,7 +10,10 @@ RUN apt-get update && apt-get install -y \
 
 # Create venv_audiocraft
 RUN python -m venv venv_audiocraft
-ENV PATH="/app/venv_audiocraft/bin:$PATH"
+
+# Activate virtual environment
+SHELL ["/bin/bash", "-c"]
+RUN source venv_audiocraft/bin/activate
 
 # Install PyTorch CPU first
 RUN pip install --no-cache-dir torch==2.1.0+cpu torchaudio==2.1.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu
@@ -36,5 +39,5 @@ RUN mkdir -p outputs
 # Expose default port
 EXPOSE 8000
 
-# Start the application using Python script
-CMD ["python", "start.py"] 
+# Start the application using Python script with activated environment
+CMD source venv_audiocraft/bin/activate && python start.py 
