@@ -293,9 +293,13 @@ def cleanup_old_files(max_files: int = 100):
 
 if __name__ == "__main__":
     import uvicorn
+    
+    # Get port from environment variable or use default
+    port = int(os.getenv("PORT", "8000"))
+    
     uvicorn.run(
         "api:app",
         host="0.0.0.0",
-        port=8000,
+        port=port,
         reload=True
     ) 
