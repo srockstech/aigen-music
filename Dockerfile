@@ -28,10 +28,6 @@ RUN git clone --depth 1 https://github.com/facebookresearch/audiocraft.git && \
 COPY api.py .
 COPY README.md .
 COPY LICENSE .
-COPY start.sh .
-
-# Make start script executable
-RUN chmod +x start.sh
 
 # Create outputs directory
 RUN mkdir -p outputs
@@ -39,5 +35,5 @@ RUN mkdir -p outputs
 # Expose default port
 EXPOSE 8000
 
-# Start the application using the shell script
-CMD ["./start.sh"] 
+# Start the application directly with shell command to handle PORT
+CMD /bin/bash -c "source venv_audiocraft/bin/activate && python -c \"import uvicorn; import os; port = int(os.getenv('PORT', '8000')); uvicorn.run('api:app', host='0.0.0.0', port=port)\"" 
