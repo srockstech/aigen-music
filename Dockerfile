@@ -31,19 +31,21 @@ WORKDIR /app
 
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy only necessary files
 COPY api.py .
 COPY README.md .
 COPY LICENSE .
+COPY start.sh .
+
+# Make start script executable
+RUN chmod +x start.sh
 
 # Create outputs directory
 RUN mkdir -p outputs
 
-# Expose port
-ENV PORT=8000
+# Expose default port
 EXPOSE 8000
 
-# Start the application using shell form to expand environment variables
-CMD uvicorn api:app --host 0.0.0.0 --port ${PORT} 
+# Start the application using the shell script
+CMD ["./start.sh"] 
