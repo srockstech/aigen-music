@@ -45,5 +45,5 @@ RUN mkdir -p outputs
 ENV PORT=8000
 EXPOSE 8000
 
-# Start the application
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "${PORT}"] 
+# Start the application using shell form to expand environment variables
+CMD uvicorn api:app --host 0.0.0.0 --port ${PORT} 
